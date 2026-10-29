@@ -1,0 +1,10 @@
+node_modules/
+front/.next/
+back/dist/
+back/data/
+back/uploads/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+.DS_Store

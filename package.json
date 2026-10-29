@@ -1,0 +1,17 @@
+{
+  "name": "mimo-store",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "front",
+    "back"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w front\" \"npm run dev -w back\"",
+    "build": "npm run build -w front && npm run build -w back",
+    "lint": "npm run lint -w front"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
+}
