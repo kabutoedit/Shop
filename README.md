@@ -2,31 +2,56 @@
 
 Многостраничный магазин детской одежды и аксессуаров для Кыргызстана. Витрина использует самостоятельный минималистичный стиль и общие e-commerce сценарии: кампании, категории, каталог, карточки товаров, корзина и защищённая панель управления.
 
-## Локальный запуск
+## Локальная разработка
 
-Нужны Node.js 20.19+ или 22.13+ и npm. Перед запуском API задайте собственные данные администратора:
+Нужны Node.js 22.13+ и npm. Настройте локальные секреты Worker:
 
 ```bash
-cp back/.env.example back/.env
+cp front/.dev.vars.example front/.dev.vars
 ```
 
-Откройте `back/.env` и замените `ADMIN_USERNAME`, `ADMIN_PASSWORD` и `ADMIN_SESSION_SECRET`. Пароль должен содержать минимум 12 символов, секрет сессии — минимум 32. Используйте случайный секрет, не публикуйте `.env` и не оставляйте значения-заглушки из примера.
+Замените значения в `front/.dev.vars`. Пароль администратора должен быть длиной не менее 12 символов, а `ADMIN_SESSION_SECRET` — не менее 32. Не добавляйте этот файл в Git и не отправляйте секреты в чат.
 
 Затем из корня проекта:
 
 ```bash
 npm install
-npm run dev
+npm run dev -w front
 ```
 
-Магазин: [http://localhost:3000](http://localhost:3000). Вход в админку: [http://localhost:3000/admin](http://localhost:3000/admin). Используйте заданные в `back/.env` имя и пароль. API: [http://localhost:4000](http://localhost:4000).
-
-Для разработки только одного приложения:
+Магазин откроется на [http://localhost:3000](http://localhost:3000), админка — на [http://localhost:3000/admin](http://localhost:3000/admin). Для локальной D1-базы сначала примените миграции из `front`:
 
 ```bash
-npm run dev -w front
-npm run dev -w back
+npx wrangler d1 migrations apply mimo-store --local
 ```
+
+## Развёртывание на Cloudflare Workers
+
+Приложение использует OpenNext для Cloudflare Workers, D1 для каталога и Workers KV для фотографий. В бесплатном Workers plan KV включает 1 GB хранения, 100 000 чтений и 1 000 записей в сутки; операции сверх дневных лимитов завершаются ошибкой, а не оплачиваются автоматически. Из корня проекта:
+
+1. Выполните `npm install`, затем войдите в Wrangler: `npx wrangler login`.
+2. Создайте ресурсы:
+   ```bash
+   npx wrangler d1 create mimo-store
+   npx wrangler kv namespace create PRODUCT_IMAGES
+   ```
+3. Вставьте `database_id` и KV `id`, показанные командами, в `front/wrangler.jsonc`.
+4. Создайте Worker secrets из `front` (каждая команда запросит значение скрытым вводом):
+   ```bash
+   npx wrangler secret put ADMIN_USERNAME
+   npx wrangler secret put ADMIN_PASSWORD
+   npx wrangler secret put ADMIN_SESSION_SECRET
+   ```
+   Установите уникальный пароль длиной не менее 12 символов и случайный `ADMIN_SESSION_SECRET` длиной не менее 32. Его можно создать локально: `openssl rand -hex 32`. Не записывайте секреты в Git или этот чат.
+5. Примените схему к production D1 и опубликуйте Worker:
+   ```bash
+   cd front
+   npx wrangler d1 migrations apply mimo-store --remote
+   npm run deploy
+   ```
+6. Проверьте адрес Worker, `/api/health`, каталог и вход `/admin`. Первый запрос добавит демонстрационные товары в пустой каталог.
+
+Для разработки локально используйте `npx wrangler d1 migrations apply mimo-store --local`. Локальные товары из `back/data/store.sqlite` и файлы из `back/uploads/` не импортируются автоматически: до переключения магазина на новый Worker отдельно перенесите нужные данные и фотографии. Не удаляйте локальную базу или фотографии, пока не проверите перенос. Подключение пользовательского домена настраивается в Cloudflare Worker после публикации.
 
 ## Возможности
 
@@ -42,7 +67,7 @@ npm run dev -w back
 - Защищённая админка: вход по паролю, создание, редактирование, скрытие и удаление товаров.
 - Витрина и открытые вкладки админки автоматически обновляют данные товаров при изменениях через админку.
 - Загрузка до 10 изображений товара (JPG, PNG, WebP, AVIF или GIF, до 8 МБ на изображение).
-- SQLite-хранилище для товаров, фотографий, вариантов и остатков.
+- Cloudflare D1 для товаров и остатков, Workers KV для фотографий.
 
 Оформление заказа и онлайн-оплата пока не подключены. Восемь стартовых товаров — демонстрационные, их можно менять через админку. Название mimo, изображения, сведения о доставке и текстовые блоки также временные.
 
@@ -60,24 +85,18 @@ front/src/
     contact/              # контакты
     admin/                # вход и управление товарами
   shared/
-    api/                  # запросы к Express
+    api/                  # запросы к same-origin API
     lib/                  # корзина, язык и валюта
     ui/                   # общие элементы витрины
 
-back/src/
-  app.ts                  # Express API, сессии и загрузка изображений
-  auth.ts                 # проверка администратора и сессия
-  routes/products.ts      # публичный и административный API каталога
-  data/
-    database.ts           # SQLite WASM и сохранение базы
-    products.ts           # демонстрационные товары и типы
+front/src/app/api/        # Next.js API-маршруты для Workers
+front/migrations/         # схема Cloudflare D1
+front/src/shared/lib/     # Cloudflare D1, KV и проверка сессии
 ```
 
-Публичный API: `GET /api/health`, `GET /api/products`, `GET /api/products/:id`. Панель управления использует защищённые маршруты `/api/admin/*`.
+Публичный API: `GET /api/health`, `GET /api/products`, `GET /api/products/:id`. Панель управления использует защищённые маршруты `/api/admin/*`; изображения сохраняются в Workers KV и выдаются через `/api/images/:key`.
 
-База данных по умолчанию хранится в `back/data/store.sqlite`, загруженные изображения — в `back/uploads/`. Эти каталоги исключены из Git; сохраните их резервную копию перед переносом/обновлением. API рассчитан на один Node.js процесс; перед запуском нескольких экземпляров или серьёзным ростом магазина следует перенести хранилище на серверную СУБД.
-
-Переменные окружения описаны в `back/.env.example` и `front/.env.example`. Если фронтенд запущен не на `localhost:3000`, обновите `FRONTEND_ORIGIN` в `back/.env`; адрес загружаемых изображений при необходимости задаётся через `PUBLIC_API_URL`.
+Каталог хранится в D1, фотографии — в Workers KV. Локальные секреты задаются в `front/.dev.vars`, а production-секреты — через `wrangler secret put`. Старый Express API и локальная SQLite-база остаются в `back/` для сохранения локальных данных; они не используются опубликованным Worker.
 
 ## Проверки
 

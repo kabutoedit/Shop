@@ -1,5 +1,8 @@
 node_modules/
 front/.next/
+front/.open-next/
+front/.wrangler/
+front/.dev.vars
 back/dist/
 back/data/
 back/uploads/

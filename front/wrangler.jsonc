@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mimo-store",
+  "main": ".open-next/worker.js",
+  "workers_dev": true,
+  "compatibility_date": "2026-10-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mimo-store",
+      "database_id": "bd28d70e-7f6d-4882-9e49-56570b2bbeb1",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "PRODUCT_IMAGES",
+      "id": "8b82d7aef2224408bb6c6fc0939b959d"
+    }
+  ]
+}
